@@ -37,6 +37,7 @@
 
 package org.mozilla.testnewglsurfaceview;
 
+import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import javax.microedition.khronos.egl.EGL10;
@@ -164,13 +165,19 @@ public class GLController {
         SurfaceHolder surfaceHolder = mView.getHolder();
         mEGLSurface = mEGL.eglCreateWindowSurface(mEGLDisplay, mEGLConfig, surfaceHolder, null);
         if (mEGLSurface == null || mEGLSurface == EGL10.EGL_NO_SURFACE) {
-            throw new GLControllerException("EGL window surface could not be created");
+            throw new GLControllerException("EGL window surface could not be created!");
+        }
+
+        if (!mEGL.eglMakeCurrent(mEGLDisplay, mEGLSurface, mEGLSurface, mEGLContext)) {
+            throw new GLControllerException("EGL surface could not be made into the current " +
+                                            "surface!");
         }
 
         mGL = mEGLContext.getGL();
 
         if (mView.getRenderer() != null) {
             mView.getRenderer().onSurfaceCreated((GL10)mGL, mEGLConfig);
+            mView.getRenderer().onSurfaceChanged((GL10)mGL, mView.getWidth(), mView.getHeight());
         }
     }
 

@@ -120,16 +120,21 @@ class GLThread extends Thread {
 
     private class RenderFrameMessage implements Runnable {
         public void run() {
+            synchronized (GLThread.this) {
+                mRenderQueued = false;
+            }
+
+            // Bail out if the surface was lost.
+            if (mController.getEGLSurface() == null) {
+                return;
+            }
+
             GLSurfaceView.Renderer renderer = getRenderer();
             if (renderer != null) {
                 renderer.onDrawFrame((GL10)mController.getGL());
             }
             if (!mController.swapBuffers() && mController.checkForLostContext()) {
                 doRecreateSurface();
-            }
-
-            synchronized (GLThread.this) {
-                mRenderQueued = false;
             }
         }
     }
