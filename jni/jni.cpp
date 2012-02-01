@@ -36,9 +36,12 @@
  * ***** END LICENSE BLOCK ***** */
 
 #include <jni.h>
+#include <GLES/gl.h>
+#include <GLES/glext.h>
 #include <android/log.h>
 #include <cassert>
 #include <cstdlib>
+#include <EGL/egl.h>
 #include <pthread.h>
 
 #define NS_ASSERTION(cond, msg) assert((cond) && msg)
@@ -47,70 +50,93 @@ extern "C" JavaVM *jvm;
 
 namespace {
 
-template<typename Info,typename NativeType>
+template<typename T>
 class AndroidEGLObject {
 public:
     AndroidEGLObject(JNIEnv* aJEnv, jobject aJObj)
-    : mPtr(reinterpret_cast<mPtr>(aJEnv->GetIntField(aJObj, jPointerField))) {}
+    : mPtr(reinterpret_cast<typename T::NativeType>(aJEnv->GetIntField(aJObj, jPointerField))) {}
 
     static void Init(JNIEnv* aJEnv) {
-        jclass jClass = aJEnv->NewGlobalRef(aJEnv->FindClass(Info::sClassName));
-        jPointerField = aJEnv->GetFieldID(jClass, Info::sPointerFieldName, "I");
+        jclass jClass = reinterpret_cast<jclass>
+            (aJEnv->NewGlobalRef(aJEnv->FindClass(sClassName)));
+        jPointerField = aJEnv->GetFieldID(jClass, sPointerFieldName, "I");
     }
 
-    NativeType& operator*() const {
+    typename T::NativeType const& operator*() const {
         return mPtr;
     }
 
 private:
     static jfieldID jPointerField;
-    const NativeType mPtr;
+    static const char* sClassName;
+    static const char* sPointerFieldName;
+
+    const typename T::NativeType mPtr;
 };
 
 class AndroidEGLDisplayInfo {
 public:
-    static const char *sClassName = "com/google/android/gles_jni/EGLDisplayImpl";
-    static const char *sPointerFieldName = "mEGLDisplay";
-
+    typedef EGLDisplay NativeType;
 private:
     AndroidEGLDisplayInfo() {}
 };
 
 class AndroidEGLConfigInfo {
 public:
-    static const char *sClassName = "com/google/android/gles_jni/EGLConfigImpl";
-    static const char *sPointerFieldName = "mEGLConfig";
-
+    typedef EGLConfig NativeType;
 private:
     AndroidEGLConfigInfo() {}
 };
 
 class AndroidEGLContextInfo {
 public:
-    static const char *sClassName = "com/google/android/gles_jni/EGLContextImpl";
-    static const char *sPointerFieldName = "mEGLContext";
-
+    typedef EGLContext NativeType;
 private:
     AndroidEGLContextInfo() {}
-}
+};
 
-class AndroidEGLContextInfo {
+class AndroidEGLSurfaceInfo {
 public:
-    static const char *sClassName = "com/google/android/gles_jni/EGLSurfaceImpl";
-    static const char *sPointerFieldName = "mEGLSurface";
-
+    typedef EGLSurface NativeType;
 private:
     AndroidEGLSurfaceInfo() {}
-}
+};
 
-typedef AndroidEGLObject<AndroidEGLDisplayInfo,EGLDisplay> AndroidEGLDisplay;
-typedef AndroidEGLObject<AndroidEGLConfigInfo,EGLConfig> AndroidEGLConfig;
-typedef AndroidEGLObject<AndroidEGLContextInfo,EGLContext> AndroidEGLContext;
-typedef AndroidEGLObject<AndroidEGLSurfaceInfo,EGLSurface> AndroidEGLSurface;
+typedef AndroidEGLObject<AndroidEGLDisplayInfo> AndroidEGLDisplay;
+typedef AndroidEGLObject<AndroidEGLConfigInfo> AndroidEGLConfig;
+typedef AndroidEGLObject<AndroidEGLContextInfo> AndroidEGLContext;
+typedef AndroidEGLObject<AndroidEGLSurfaceInfo> AndroidEGLSurface;
+
+template<>
+const char *AndroidEGLDisplay::sClassName = "com/google/android/gles_jni/EGLDisplayImpl";
+template<>
+const char *AndroidEGLDisplay::sPointerFieldName = "mEGLDisplay";
+template<>
+jfieldID AndroidEGLDisplay::jPointerField = 0;
+template<>
+const char *AndroidEGLConfig::sClassName = "com/google/android/gles_jni/EGLConfigImpl";
+template<>
+const char *AndroidEGLConfig::sPointerFieldName = "mEGLConfig";
+template<>
+jfieldID AndroidEGLConfig::jPointerField = 0;
+template<>
+const char *AndroidEGLContext::sClassName = "com/google/android/gles_jni/EGLContextImpl";
+template<>
+const char *AndroidEGLContext::sPointerFieldName = "mEGLContext";
+template<>
+jfieldID AndroidEGLContext::jPointerField = 0;
+template<>
+const char *AndroidEGLSurface::sClassName = "com/google/android/gles_jni/EGLSurfaceImpl";
+template<>
+const char *AndroidEGLSurface::sPointerFieldName = "mEGLSurface";
+template<>
+jfieldID AndroidEGLSurface::jPointerField = 0;
 
 class AndroidGLController {
 public:
-    void Acquire(jobject aJObj);
+    static void Init(JNIEnv* aJEnv);
+
+    void Acquire(JNIEnv *aJEnv, jobject aJObj);
 
     void SetGLVersion(int aVersion);
     void InitGLContext();
@@ -120,6 +146,8 @@ public:
     EGLContext GetEGLContext();
     EGLSurface GetEGLSurface();
     bool HasSurface();
+    bool SwapBuffers();
+    bool CheckForLostContext();
 
 private:
     static jmethodID jSetGLVersionMethod;
@@ -130,40 +158,201 @@ private:
     static jmethodID jGetEGLContextMethod;
     static jmethodID jGetEGLSurfaceMethod;
     static jmethodID jHasSurfaceMethod;
+    static jmethodID jSwapBuffersMethod;
+    static jmethodID jCheckForLostContextMethod;
+
+    JNIEnv *mJEnv;
+    jobject mJObj;
 };
 
 static AndroidGLController sController;
 
+jmethodID AndroidGLController::jSetGLVersionMethod = 0;
+jmethodID AndroidGLController::jInitGLContextMethod = 0;
+jmethodID AndroidGLController::jDisposeGLContextMethod = 0;
+jmethodID AndroidGLController::jGetEGLDisplayMethod = 0;
+jmethodID AndroidGLController::jGetEGLConfigMethod = 0;
+jmethodID AndroidGLController::jGetEGLContextMethod = 0;
+jmethodID AndroidGLController::jGetEGLSurfaceMethod = 0;
+jmethodID AndroidGLController::jHasSurfaceMethod = 0;
+jmethodID AndroidGLController::jSwapBuffersMethod = 0;
+jmethodID AndroidGLController::jCheckForLostContextMethod = 0;
+
 void
-AndroidGLController::Acquire(jobject aJObj)
+AndroidGLController::Init(JNIEnv *aJEnv)
 {
-    jobj = aJObj;
+    const char *className = "org/mozilla/testnewglsurfaceview/GLController";
+    jclass jClass = reinterpret_cast<jclass>(aJEnv->NewGlobalRef(aJEnv->FindClass(className)));
+
+    jSetGLVersionMethod = aJEnv->GetMethodID(jClass, "setGLVersion", "(I)V");
+    jInitGLContextMethod = aJEnv->GetMethodID(jClass, "initGLContext", "()V");
+    jDisposeGLContextMethod = aJEnv->GetMethodID(jClass, "disposeGLContext", "()V");
+    jGetEGLDisplayMethod = aJEnv->GetMethodID(jClass, "getEGLDisplay",
+                                              "()Ljavax/microedition/khronos/egl/EGLDisplay;");
+    jGetEGLConfigMethod = aJEnv->GetMethodID(jClass, "getEGLConfig",
+                                             "()Ljavax/microedition/khronos/egl/EGLConfig;");
+    jGetEGLContextMethod = aJEnv->GetMethodID(jClass, "getEGLContext",
+                                              "()Ljavax/microedition/khronos/egl/EGLContext;");
+    jGetEGLSurfaceMethod = aJEnv->GetMethodID(jClass, "getEGLSurface",
+                                              "()Ljavax/microedition/khronos/egl/EGLSurface;");
+    jHasSurfaceMethod = aJEnv->GetMethodID(jClass, "hasSurface", "()Z");
+    jSwapBuffersMethod = aJEnv->GetMethodID(jClass, "swapBuffers", "()Z");
+    jCheckForLostContextMethod = aJEnv->GetMethodID(jClass, "checkForLostContext", "()Z");
+}
+
+void
+AndroidGLController::Acquire(JNIEnv* aJEnv, jobject aJObj)
+{
+    mJEnv = aJEnv;
+    mJObj = aJObj;
 }
 
 void
 AndroidGLController::SetGLVersion(int aVersion)
 {
-    //mJEnv->CallVoidMethod
+    mJEnv->CallVoidMethod(mJObj, jSetGLVersionMethod, aVersion);
 }
 
 void
-start(void *userdata)
+AndroidGLController::InitGLContext()
 {
-    AndroidGLController *glController = reinterpret_cast<AndroidGLController *>(userdata);
+    mJEnv->CallVoidMethod(mJObj, jInitGLContextMethod);
+}
+
+void
+AndroidGLController::DisposeGLContext()
+{
+    mJEnv->CallVoidMethod(mJObj, jDisposeGLContextMethod);
+}
+
+EGLDisplay
+AndroidGLController::GetEGLDisplay()
+{
+    AndroidEGLDisplay jEGLDisplay(mJEnv, mJEnv->CallObjectMethod(mJObj, jGetEGLDisplayMethod));
+    return *jEGLDisplay;
+}
+
+EGLConfig
+AndroidGLController::GetEGLConfig()
+{
+    AndroidEGLConfig jEGLConfig(mJEnv, mJEnv->CallObjectMethod(mJObj, jGetEGLConfigMethod));
+    return *jEGLConfig;
+}
+
+EGLContext
+AndroidGLController::GetEGLContext()
+{
+    AndroidEGLContext jEGLContext(mJEnv, mJEnv->CallObjectMethod(mJObj, jGetEGLContextMethod));
+    return *jEGLContext;
+}
+
+EGLSurface
+AndroidGLController::GetEGLSurface()
+{
+    AndroidEGLSurface jEGLSurface(mJEnv, mJEnv->CallObjectMethod(mJObj, jGetEGLSurfaceMethod));
+    return *jEGLSurface;
+}
+
+bool
+AndroidGLController::HasSurface()
+{
+    return mJEnv->CallBooleanMethod(mJObj, jHasSurfaceMethod);
+}
+
+bool
+AndroidGLController::SwapBuffers()
+{
+    return mJEnv->CallBooleanMethod(mJObj, jSwapBuffersMethod);
+}
+
+bool
+AndroidGLController::CheckForLostContext()
+{
+    return mJEnv->CallBooleanMethod(mJObj, jCheckForLostContextMethod);
+}
+
+void*
+start(void* userdata)
+{
+	float vertices[] = { 0.0f, 1.0f, 0.0f, 	//Top
+					  	-1.0f, -1.0f, 0.0f, //Bottom Left
+						 1.0f, -1.0f, 0.0f 	//Bottom Right
+    };
+    const int numVertices = 9;
+	
+	float colors[] = {
+        1.0f, 0.0f, 0.0f, 1.0f, //Set The Color To Red, last value 100% luminance
+		0.0f, 1.0f, 0.0f, 1.0f, //Set The Color To Green, last value 100% luminance
+		0.0f, 0.0f, 1.0f, 1.0f 	//Set The Color To Blue, last value 100% luminance
+	};
+    const float numColors = 12;
+
+    sController.SetGLVersion(1);
+    sController.InitGLContext();
+
+    float currentScale = 1.0f, scaleDelta = 0.0f;
+
+    while (true) {
+        currentScale += scaleDelta;
+        if (scaleDelta < 0.0f && currentScale < -1.0f) {
+            currentScale = -1.0f;
+            scaleDelta = -scaleDelta;
+        } else if (scaleDelta > 0.0f && currentScale > 1.0f) {
+            currentScale = 1.0f;
+            scaleDelta = -scaleDelta;
+        }
+
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		//Set the face rotation
+		glFrontFace(GL_CW);
+		
+		//Point to our buffers
+		glVertexPointer(3, GL_FLOAT, 0, vertices);
+		glColorPointer(4, GL_FLOAT, 0, colors);
+		
+		//Enable the vertex and color state
+		glEnableClientState(GL_VERTEX_ARRAY);
+		glEnableClientState(GL_COLOR_ARRAY);
+
+        glLoadIdentity();
+        glScalef(currentScale, 1.0f, 1.0f);
+		
+		//Draw the vertices as triangles
+		glDrawArrays(GL_TRIANGLES, 0, numVertices / 3);
+		
+		//Disable the client state before leaving
+		glDisableClientState(GL_VERTEX_ARRAY);
+		glDisableClientState(GL_COLOR_ARRAY);
+
+        sController.SwapBuffers();
+    }
+
+    return NULL;
 }
 
 }   // end anonymous namespace
 
+#define TestNewGLSurfaceView_start  \
+    Java_org_mozilla_testnewglsurfaceview_TestNewGLSurfaceView_start
+
 extern "C" {
-    JNIEXPORT void JNICALL Java_org_mozilla_testnewglsurfaceview_start(JNIEnv *env, jobject self);
-}
+    JNIEXPORT void JNICALL TestNewGLSurfaceView_start(JNIEnv* aJEnv, jobject aSelf);
+}   // end extern "C"
 
 JNIEXPORT void JNICALL
-Java_org_mozilla_testnewglsurfaceview_start(JNIEnv *env, jobject self)
+TestNewGLSurfaceView_start(JNIEnv* aJEnv, jobject aSelf)
 {
-    sController.Acquire(self);
+    AndroidEGLDisplay::Init(aJEnv);
+    AndroidEGLConfig::Init(aJEnv);
+    AndroidEGLContext::Init(aJEnv);
+    AndroidEGLSurface::Init(aJEnv);
+    AndroidGLController::Init(aJEnv);
+
+    sController.Acquire(aJEnv, aSelf);
 
     pthread_t thread;
-    pthread_create(&thread, NULL, start, env);
+    pthread_create(&thread, NULL, start, aJEnv);
 }
 

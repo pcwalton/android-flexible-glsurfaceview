@@ -112,6 +112,23 @@ public class GLController {
         return mEGLSurface != null;
     }
 
+    public boolean swapBuffers() {
+        return mEGL.eglSwapBuffers(mEGLDisplay, mEGLSurface);
+    }
+
+    public boolean checkForLostContext() {
+        if (mEGL.eglGetError() != EGL11.EGL_CONTEXT_LOST) {
+            return false;
+        }
+
+        mEGLDisplay = null;
+        mEGLConfig = null;
+        mEGLContext = null;
+        mEGLSurface = null;
+        mGL = null;
+        return true;
+    }
+
     private void initEGLContext() {
         mEGL = (EGL10)EGLContext.getEGL();
 
@@ -179,23 +196,6 @@ public class GLController {
             mView.getRenderer().onSurfaceCreated((GL10)mGL, mEGLConfig);
             mView.getRenderer().onSurfaceChanged((GL10)mGL, mView.getWidth(), mView.getHeight());
         }
-    }
-
-    public boolean swapBuffers() {
-        return mEGL.eglSwapBuffers(mEGLDisplay, mEGLSurface);
-    }
-
-    public boolean checkForLostContext() {
-        if (mEGL.eglGetError() != EGL11.EGL_CONTEXT_LOST) {
-            return false;
-        }
-
-        mEGLDisplay = null;
-        mEGLConfig = null;
-        mEGLContext = null;
-        mEGLSurface = null;
-        mGL = null;
-        return true;
     }
 
     public static class GLControllerException extends RuntimeException {
