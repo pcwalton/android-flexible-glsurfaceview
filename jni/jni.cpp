@@ -151,6 +151,8 @@ public:
     bool SwapBuffers();
     bool CheckForLostContext();
     void WaitForValidSurface();
+    int GetWidth();
+    int GetHeight();
 
 private:
     static jmethodID jSetGLVersionMethod;
@@ -164,6 +166,8 @@ private:
     static jmethodID jSwapBuffersMethod;
     static jmethodID jCheckForLostContextMethod;
     static jmethodID jWaitForValidSurfaceMethod;
+    static jmethodID jGetWidthMethod;
+    static jmethodID jGetHeightMethod;
 
     JNIEnv *mJEnv;
     jobject mJObj;
@@ -182,6 +186,8 @@ jmethodID AndroidGLController::jHasSurfaceMethod = 0;
 jmethodID AndroidGLController::jSwapBuffersMethod = 0;
 jmethodID AndroidGLController::jCheckForLostContextMethod = 0;
 jmethodID AndroidGLController::jWaitForValidSurfaceMethod = 0;
+jmethodID AndroidGLController::jGetWidthMethod = 0;
+jmethodID AndroidGLController::jGetHeightMethod = 0;
 
 void
 AndroidGLController::Init(JNIEnv *aJEnv)
@@ -204,6 +210,8 @@ AndroidGLController::Init(JNIEnv *aJEnv)
     jSwapBuffersMethod = aJEnv->GetMethodID(jClass, "swapBuffers", "()Z");
     jCheckForLostContextMethod = aJEnv->GetMethodID(jClass, "checkForLostContext", "()Z");
     jWaitForValidSurfaceMethod = aJEnv->GetMethodID(jClass, "waitForValidSurface", "()V");
+    jGetWidthMethod = aJEnv->GetMethodID(jClass, "getWidth", "()I");
+    jGetHeightMethod = aJEnv->GetMethodID(jClass, "getHeight", "()I");
 }
 
 void
@@ -300,6 +308,18 @@ AndroidGLController::WaitForValidSurface()
     mJEnv->CallVoidMethod(mJObj, jWaitForValidSurfaceMethod);
 }
 
+int
+AndroidGLController::GetWidth()
+{
+    return mJEnv->CallIntMethod(mJObj, jGetWidthMethod);
+}
+
+int
+AndroidGLController::GetHeight()
+{
+    return mJEnv->CallIntMethod(mJObj, jGetHeightMethod);
+}
+
 void*
 start(void* userdata)
 {
@@ -337,6 +357,10 @@ start(void* userdata)
 
     while (true) {
         sController.WaitForValidSurface();
+
+        glViewport(0, 0, sController.GetWidth(), sController.GetHeight());
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
 
         currentScale += scaleDelta;
         if (scaleDelta < 0.0f && currentScale < -1.0f) {

@@ -56,6 +56,7 @@ public class GLController {
     private FlexibleGLSurfaceView mView;
     private int mGLVersion;
     private boolean mSurfaceValid;
+    private int mWidth, mHeight;
 
     private EGL10 mEGL;
     private EGLDisplay mEGLDisplay;
@@ -152,6 +153,14 @@ public class GLController {
         }
     }
 
+    public synchronized int getWidth() {
+        return mWidth;
+    }
+
+    public synchronized int getHeight() {
+        return mHeight;
+    }
+
     synchronized void surfaceCreated() {
         mSurfaceValid = true;
         notifyAll();
@@ -160,6 +169,11 @@ public class GLController {
     synchronized void surfaceDestroyed() {
         mSurfaceValid = false;
         notifyAll();
+    }
+
+    synchronized void sizeChanged(int newWidth, int newHeight) {
+        mWidth = newWidth;
+        mHeight = newHeight;
     }
 
     private void initEGLContext() {

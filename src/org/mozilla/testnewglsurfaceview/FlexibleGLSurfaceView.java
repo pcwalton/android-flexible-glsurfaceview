@@ -133,6 +133,7 @@ public class FlexibleGLSurfaceView extends SurfaceView implements SurfaceHolder.
 
     public synchronized void surfaceChanged(SurfaceHolder holder, int format, int width,
                                             int height) {
+        mController.sizeChanged(width, height);
         if (mGLThread != null) {
             mGLThread.surfaceChanged(width, height);
         }
