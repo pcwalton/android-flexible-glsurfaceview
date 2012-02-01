@@ -142,12 +142,14 @@ public class FlexibleGLSurfaceView extends SurfaceView implements SurfaceHolder.
     }
 
     public synchronized void surfaceCreated(SurfaceHolder holder) {
+        mController.surfaceCreated();
         if (mGLThread != null) {
             mGLThread.surfaceCreated();
         }
     }
 
     public synchronized void surfaceDestroyed(SurfaceHolder holder) {
+        mController.surfaceDestroyed();
         if (mGLThread != null) {
             mGLThread.surfaceDestroyed();
         }

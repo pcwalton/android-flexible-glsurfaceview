@@ -46,9 +46,9 @@
 
 #define NS_ASSERTION(cond, msg) assert((cond) && msg)
 
-extern "C" JavaVM *jvm;
-
 namespace {
+
+JavaVM *sJVM = NULL;
 
 template<typename T>
 class AndroidEGLObject {
@@ -137,6 +137,8 @@ public:
     static void Init(JNIEnv* aJEnv);
 
     void Acquire(JNIEnv *aJEnv, jobject aJObj);
+    void Acquire(JNIEnv *aJEnv);
+    void Release();
 
     void SetGLVersion(int aVersion);
     void InitGLContext();
@@ -148,6 +150,7 @@ public:
     bool HasSurface();
     bool SwapBuffers();
     bool CheckForLostContext();
+    void WaitForValidSurface();
 
 private:
     static jmethodID jSetGLVersionMethod;
@@ -160,6 +163,7 @@ private:
     static jmethodID jHasSurfaceMethod;
     static jmethodID jSwapBuffersMethod;
     static jmethodID jCheckForLostContextMethod;
+    static jmethodID jWaitForValidSurfaceMethod;
 
     JNIEnv *mJEnv;
     jobject mJObj;
@@ -177,6 +181,7 @@ jmethodID AndroidGLController::jGetEGLSurfaceMethod = 0;
 jmethodID AndroidGLController::jHasSurfaceMethod = 0;
 jmethodID AndroidGLController::jSwapBuffersMethod = 0;
 jmethodID AndroidGLController::jCheckForLostContextMethod = 0;
+jmethodID AndroidGLController::jWaitForValidSurfaceMethod = 0;
 
 void
 AndroidGLController::Init(JNIEnv *aJEnv)
@@ -198,13 +203,31 @@ AndroidGLController::Init(JNIEnv *aJEnv)
     jHasSurfaceMethod = aJEnv->GetMethodID(jClass, "hasSurface", "()Z");
     jSwapBuffersMethod = aJEnv->GetMethodID(jClass, "swapBuffers", "()Z");
     jCheckForLostContextMethod = aJEnv->GetMethodID(jClass, "checkForLostContext", "()Z");
+    jWaitForValidSurfaceMethod = aJEnv->GetMethodID(jClass, "waitForValidSurface", "()V");
 }
 
 void
 AndroidGLController::Acquire(JNIEnv* aJEnv, jobject aJObj)
 {
     mJEnv = aJEnv;
-    mJObj = aJObj;
+    mJObj = aJEnv->NewGlobalRef(aJObj);
+}
+
+void
+AndroidGLController::Acquire(JNIEnv* aJEnv)
+{
+    mJEnv = aJEnv;
+}
+
+void
+AndroidGLController::Release()
+{
+    if (mJObj) {
+        mJEnv->DeleteGlobalRef(mJObj);
+        mJObj = NULL;
+    }
+
+    mJEnv = NULL;
 }
 
 void
@@ -271,9 +294,21 @@ AndroidGLController::CheckForLostContext()
     return mJEnv->CallBooleanMethod(mJObj, jCheckForLostContextMethod);
 }
 
+void
+AndroidGLController::WaitForValidSurface()
+{
+    mJEnv->CallVoidMethod(mJObj, jWaitForValidSurfaceMethod);
+}
+
 void*
 start(void* userdata)
 {
+    __android_log_print(ANDROID_LOG_ERROR, "TNGLSV", "### Thread start");
+
+    JNIEnv *jEnv;
+    sJVM->AttachCurrentThread(&jEnv, NULL);
+    sController.Acquire(jEnv);
+
 	float vertices[] = { 0.0f, 1.0f, 0.0f, 	//Top
 					  	-1.0f, -1.0f, 0.0f, //Bottom Left
 						 1.0f, -1.0f, 0.0f 	//Bottom Right
@@ -287,12 +322,22 @@ start(void* userdata)
 	};
     const float numColors = 12;
 
+    sController.WaitForValidSurface();
     sController.SetGLVersion(1);
     sController.InitGLContext();
 
-    float currentScale = 1.0f, scaleDelta = 0.0f;
+    if (jEnv->ExceptionCheck()) {
+        jEnv->ExceptionDescribe();
+        jEnv->ExceptionClear();
+    }
+
+    __android_log_print(ANDROID_LOG_ERROR, "TNGLSV", "### Done initializing GL context");
+
+    float currentScale = 1.0f, scaleDelta = -0.01f;
 
     while (true) {
+        sController.WaitForValidSurface();
+
         currentScale += scaleDelta;
         if (scaleDelta < 0.0f && currentScale < -1.0f) {
             currentScale = -1.0f;
@@ -319,9 +364,13 @@ start(void* userdata)
         glLoadIdentity();
         glScalef(currentScale, 1.0f, 1.0f);
 		
+        __android_log_print(ANDROID_LOG_ERROR, "TNGLSV", "### Drawn arrays");
+		
 		//Draw the vertices as triangles
 		glDrawArrays(GL_TRIANGLES, 0, numVertices / 3);
 		
+        __android_log_print(ANDROID_LOG_ERROR, "TNGLSV", "### Done drawing arrays");
+
 		//Disable the client state before leaving
 		glDisableClientState(GL_VERTEX_ARRAY);
 		glDisableClientState(GL_COLOR_ARRAY);
@@ -338,21 +387,23 @@ start(void* userdata)
     Java_org_mozilla_testnewglsurfaceview_TestNewGLSurfaceView_start
 
 extern "C" {
-    JNIEXPORT void JNICALL TestNewGLSurfaceView_start(JNIEnv* aJEnv, jobject aSelf);
-}   // end extern "C"
 
 JNIEXPORT void JNICALL
-TestNewGLSurfaceView_start(JNIEnv* aJEnv, jobject aSelf)
+TestNewGLSurfaceView_start(JNIEnv* aJEnv, jobject aSelf, jobject aController)
 {
+    aJEnv->GetJavaVM(&sJVM);
+
     AndroidEGLDisplay::Init(aJEnv);
     AndroidEGLConfig::Init(aJEnv);
     AndroidEGLContext::Init(aJEnv);
     AndroidEGLSurface::Init(aJEnv);
     AndroidGLController::Init(aJEnv);
 
-    sController.Acquire(aJEnv, aSelf);
+    sController.Acquire(aJEnv, aController);
 
     pthread_t thread;
     pthread_create(&thread, NULL, start, aJEnv);
 }
+
+}   // end extern "C"
 

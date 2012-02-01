@@ -55,6 +55,7 @@ public class GLController {
 
     private FlexibleGLSurfaceView mView;
     private int mGLVersion;
+    private boolean mSurfaceValid;
 
     private EGL10 mEGL;
     private EGLDisplay mEGLDisplay;
@@ -74,6 +75,7 @@ public class GLController {
     public GLController(FlexibleGLSurfaceView view) {
         mView = view;
         mGLVersion = 1;
+        mSurfaceValid = false;
     }
 
     public void setGLVersion(int version) {
@@ -127,6 +129,26 @@ public class GLController {
         mEGLSurface = null;
         mGL = null;
         return true;
+    }
+
+    public synchronized void waitForValidSurface() {
+        while (!mSurfaceValid) {
+            try {
+                wait();
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    synchronized void surfaceCreated() {
+        mSurfaceValid = true;
+        notifyAll();
+    }
+
+    synchronized void surfaceDestroyed() {
+        mSurfaceValid = false;
+        notifyAll();
     }
 
     private void initEGLContext() {

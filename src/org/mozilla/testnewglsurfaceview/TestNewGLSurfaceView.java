@@ -41,7 +41,7 @@ public class TestNewGLSurfaceView extends Activity implements GLSurfaceView.Rend
     {
         super.onCreate(savedInstanceState);
 
-		ByteBuffer byteBuf = ByteBuffer.allocateDirect(vertices.length * 4);
+		/*ByteBuffer byteBuf = ByteBuffer.allocateDirect(vertices.length * 4);
 		byteBuf.order(ByteOrder.nativeOrder());
 		vertexBuffer = byteBuf.asFloatBuffer();
 		vertexBuffer.put(vertices);
@@ -54,11 +54,15 @@ public class TestNewGLSurfaceView extends Activity implements GLSurfaceView.Rend
 		colorBuffer.position(0);
 
         mCurrentScale = 1.0f;
-        mScaleDelta = -0.01f;
+        mScaleDelta = -0.01f;*/
 
         mGLSurfaceView = new FlexibleGLSurfaceView(this);
         mGLSurfaceView.setRenderer(this);
-        mGLSurfaceView.createGLThread();
+
+        // Uncomment the below to use the Java version.
+        //mGLSurfaceView.createGLThread();
+
+        start(mGLSurfaceView.getController());
         setContentView(mGLSurfaceView);
     }
 
@@ -110,4 +114,10 @@ public class TestNewGLSurfaceView extends Activity implements GLSurfaceView.Rend
 
         mGLSurfaceView.requestRender();
     }
+
+    static {
+        System.loadLibrary("testnewglsurfaceviewjni");
+    }
+
+    private native void start(GLController controller); 
 }
