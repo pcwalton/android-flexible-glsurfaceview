@@ -38,7 +38,6 @@
 #include <jni.h>
 #include <GLES/gl.h>
 #include <GLES/glext.h>
-#include <android/log.h>
 #include <cassert>
 #include <cstdlib>
 #include <EGL/egl.h>
@@ -323,8 +322,6 @@ AndroidGLController::GetHeight()
 void*
 start(void* userdata)
 {
-    __android_log_print(ANDROID_LOG_ERROR, "TNGLSV", "### Thread start");
-
     JNIEnv *jEnv;
     sJVM->AttachCurrentThread(&jEnv, NULL);
     sController.Acquire(jEnv);
@@ -350,8 +347,6 @@ start(void* userdata)
         jEnv->ExceptionDescribe();
         jEnv->ExceptionClear();
     }
-
-    __android_log_print(ANDROID_LOG_ERROR, "TNGLSV", "### Done initializing GL context");
 
     float currentScale = 1.0f, scaleDelta = -0.01f;
 
@@ -388,13 +383,9 @@ start(void* userdata)
         glLoadIdentity();
         glScalef(currentScale, 1.0f, 1.0f);
 		
-        __android_log_print(ANDROID_LOG_ERROR, "TNGLSV", "### Drawn arrays");
-		
 		//Draw the vertices as triangles
 		glDrawArrays(GL_TRIANGLES, 0, numVertices / 3);
 		
-        __android_log_print(ANDROID_LOG_ERROR, "TNGLSV", "### Done drawing arrays");
-
 		//Disable the client state before leaving
 		glDisableClientState(GL_VERTEX_ARRAY);
 		glDisableClientState(GL_COLOR_ARRAY);
