@@ -78,12 +78,9 @@ public class FlexibleGLSurfaceView extends SurfaceView implements SurfaceHolder.
     }
 
     public synchronized void requestRender() {
-        if (mGLThread == null) {
-            throw new FlexibleGLSurfaceViewException("requestRender() is only valid with a GL " +
-                                                     "thread!");
+        if (mGLThread != null) {
+            mGLThread.renderFrame();
         }
-
-        mGLThread.renderFrame();
     }
 
     /**
@@ -110,19 +107,19 @@ public class FlexibleGLSurfaceView extends SurfaceView implements SurfaceHolder.
                                                      "thread active!");
         }
 
+        Thread glThread = mGLThread;
         mGLThread.shutdown();
+        mGLThread = null;
+        return glThread;
+    }
 
-        return new Thread(new Runnable() {
-            public void run() {
-                try {
-                    mGLThread.join();
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
+    public synchronized void recreateSurface() {
+        if (mGLThread == null) {
+            throw new FlexibleGLSurfaceViewException("recreateSurface() called with no GL " +
+                                                     "thread active!");
+        }
 
-                mGLThread = null;
-            }
-        });
+        mGLThread.recreateSurface();
     }
 
     public synchronized GLController getController() {

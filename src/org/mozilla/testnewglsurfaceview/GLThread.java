@@ -133,9 +133,11 @@ class GLThread extends Thread {
             if (renderer != null) {
                 renderer.onDrawFrame((GL10)mController.getGL());
             }
-            if (!mController.swapBuffers() && mController.checkForLostContext()) {
-                doRecreateSurface();
-            }
+
+            mController.swapBuffers();
+            //if (!mController.swapBuffers() && mController.checkForLostContext()) {
+            //    doRecreateSurface();
+            //}
         }
     }
 

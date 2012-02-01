@@ -3,6 +3,8 @@ package org.mozilla.testnewglsurfaceview;
 import android.app.Activity;
 import android.opengl.GLSurfaceView;
 import android.os.Bundle;
+import android.view.Menu;
+import android.view.MenuItem;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 import java.nio.ByteBuffer;
@@ -12,6 +14,7 @@ import java.nio.FloatBuffer;
 public class TestNewGLSurfaceView extends Activity implements GLSurfaceView.Renderer
 {
     private FlexibleGLSurfaceView mGLSurfaceView;
+    private MenuItem mSwitchMenuItem;
 
 	/** The buffer holding the vertices */
 	private FloatBuffer vertexBuffer;
@@ -41,7 +44,7 @@ public class TestNewGLSurfaceView extends Activity implements GLSurfaceView.Rend
     {
         super.onCreate(savedInstanceState);
 
-		/*ByteBuffer byteBuf = ByteBuffer.allocateDirect(vertices.length * 4);
+		ByteBuffer byteBuf = ByteBuffer.allocateDirect(vertices.length * 4);
 		byteBuf.order(ByteOrder.nativeOrder());
 		vertexBuffer = byteBuf.asFloatBuffer();
 		vertexBuffer.put(vertices);
@@ -54,16 +57,24 @@ public class TestNewGLSurfaceView extends Activity implements GLSurfaceView.Rend
 		colorBuffer.position(0);
 
         mCurrentScale = 1.0f;
-        mScaleDelta = -0.01f;*/
+        mScaleDelta = -0.01f;
 
         mGLSurfaceView = new FlexibleGLSurfaceView(this);
         mGLSurfaceView.setRenderer(this);
+        mGLSurfaceView.createGLThread();
+        setContentView(mGLSurfaceView);
+    }
 
-        // Uncomment the below to use the Java version.
-        //mGLSurfaceView.createGLThread();
+    private void switchToCXX() {
+        mSwitchMenuItem.setEnabled(false);
+
+        try {
+            mGLSurfaceView.destroyGLThread().join();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
 
         start(mGLSurfaceView.getController());
-        setContentView(mGLSurfaceView);
     }
 
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
@@ -113,6 +124,25 @@ public class TestNewGLSurfaceView extends Activity implements GLSurfaceView.Rend
         gl.glLoadIdentity();
 
         mGLSurfaceView.requestRender();
+    }
+
+    @Override
+    public boolean onPrepareOptionsMenu(Menu menu) {
+        super.onPrepareOptionsMenu(menu);
+        return true;
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        mSwitchMenuItem = menu.add("Switch to C++");
+        mSwitchMenuItem.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
+            public boolean onMenuItemClick(MenuItem item) {
+                switchToCXX();
+                return true;
+            }
+        });
+
+        return true;
     }
 
     static {
